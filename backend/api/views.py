@@ -11,7 +11,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.shortcuts import get_object_or_404
 from .models import User
-from .utils import update_elo,  process_swipe, process_match, process_unmatch, recommend_for
+from .utils import process_swipe, process_match, process_unmatch, recommend_for
 
 User = get_user_model()
 
