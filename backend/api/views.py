@@ -1,15 +1,14 @@
 # api/views.py
 
 from django.contrib.auth import get_user_model, authenticate
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, parser_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
-
-
 
 User = get_user_model()
 
@@ -22,6 +21,16 @@ def _get_tokens_for_user(user):
         'refresh': str(refresh),
         'access': str(refresh.access_token),
     }
+
+def _get_user_from_refresh(refresh_token):
+    """
+    Given a refresh token string, return the corresponding User instance.
+    Raises TokenError if the token is invalid.
+    """
+    token = RefreshToken(refresh_token)
+    user_id = token['user_id']
+    return User.objects.get(pk=user_id)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -56,6 +65,7 @@ def signup(request):
     tokens = _get_tokens_for_user(user)
     return Response(tokens, status=status.HTTP_201_CREATED)
 
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
@@ -82,10 +92,15 @@ def login(request):
     tokens = _get_tokens_for_user(user)
     return Response(tokens, status=status.HTTP_200_OK)
 
+
 @api_view(['POST'])
 @authentication_classes([JWTAuthentication])      # ← only JWT, no SessionAuth
 @permission_classes([IsAuthenticated])
 def logout(request):
+    """
+    POST { "refresh": "<refresh_token>" }
+    → blacklists the given refresh token, effectively logging the user out.
+    """
     refresh_token = request.data.get('refresh')
     if not refresh_token:
         return Response({'detail': 'Refresh token required.'},
@@ -97,3 +112,198 @@ def logout(request):
     except TokenError:
         return Response({'detail': 'Invalid or expired token.'},
                         status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@parser_classes([MultiPartParser, FormParser])
+def upload_profile_image(request):
+    """
+    POST multipart/form-data {
+      "refresh": "<refresh_token>",
+      "profile_picture": <file>
+    }
+    → validates refresh token, updates `user.profile_picture`.
+    """
+    refresh = request.data.get('refresh')
+    image = request.FILES.get('profile_picture')
+
+    if not refresh:
+        return Response({'detail': 'Refresh token required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if not image:
+        return Response({'detail': 'No profile picture provided.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = _get_user_from_refresh(refresh)
+    except (TokenError, User.DoesNotExist):
+        return Response({'detail': 'Invalid or expired token.'},
+                        status=status.HTTP_401_UNAUTHORIZED)
+
+    user.profile_picture = image
+    user.save(update_fields=['profile_picture'])
+    return Response({'detail': 'Profile picture updated.'},
+                    status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@parser_classes([MultiPartParser, FormParser])
+def upload_additional_photos(request):
+    """
+    POST multipart/form-data {
+      "refresh": "<refresh_token>",
+      "photo1": <file>,      # optional
+      "photo2": <file>,      # optional
+      "photo3": <file>       # optional
+    }
+    → validates refresh token, updates any of `user.photo1`–`user.photo3` provided.
+    """
+    refresh = request.data.get('refresh')
+    if not refresh:
+        return Response({'detail': 'Refresh token required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = _get_user_from_refresh(refresh)
+    except (TokenError, User.DoesNotExist):
+        return Response({'detail': 'Invalid or expired token.'},
+                        status=status.HTTP_401_UNAUTHORIZED)
+
+    updated = []
+    for field in ('photo1', 'photo2', 'photo3'):
+        img = request.FILES.get(field)
+        if img:
+            setattr(user, field, img)
+            updated.append(field)
+
+    if not updated:
+        return Response({'detail': 'No additional photos provided.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+    user.save(update_fields=updated)
+    return Response(
+        {'detail': 'Updated photos: ' + ', '.join(updated)},
+        status=status.HTTP_200_OK
+    )
+
+
+# Add this to api/views.py, below your other endpoints
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def update_bio(request):
+    """
+    POST JSON {
+      "refresh": "<refresh_token>",
+      "bio": "<new bio text>"
+    }
+    → validates refresh token, updates user.bio (creates or edits).
+    """
+    refresh = request.data.get('refresh')
+    # We allow setting bio to an empty string, so check for presence rather than truthiness
+    if 'bio' not in request.data:
+        return Response({'detail': 'Bio text required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    bio_text = request.data.get('bio')
+
+    if not refresh:
+        return Response({'detail': 'Refresh token required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = _get_user_from_refresh(refresh)
+    except (TokenError, User.DoesNotExist):
+        return Response({'detail': 'Invalid or expired token.'},
+                        status=status.HTTP_401_UNAUTHORIZED)
+
+    user.bio = bio_text
+    user.save(update_fields=['bio'])
+    return Response({'detail': 'Bio updated.'},
+                    status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def update_preferences(request):
+    """
+    POST JSON {
+      "refresh": "<refresh_token>",
+      "gender": "<M|F|O>",          # optional
+      "location": "<city or text>", # optional
+      "min_age": <integer>,         # optional
+      "max_age": <integer>          # optional
+    }
+    → validates refresh token, updates any of gender, location, min_age, max_age provided.
+    """
+    refresh = request.data.get('refresh')
+    if not refresh:
+        return Response({'detail': 'Refresh token required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = _get_user_from_refresh(refresh)
+    except (TokenError, User.DoesNotExist):
+        return Response({'detail': 'Invalid or expired token.'},
+                        status=status.HTTP_401_UNAUTHORIZED)
+
+    updated = []
+
+    # Gender
+    if 'gender' in request.data:
+        gender = request.data.get('gender')
+        valid = [choice[0] for choice in User.GENDER_CHOICES]
+        if gender not in valid:
+            return Response(
+                {'detail': f"'gender' must be one of {valid}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        user.gender = gender
+        updated.append('gender')
+
+    # Location
+    if 'location' in request.data:
+        user.location = request.data.get('location') or ''
+        updated.append('location')
+
+    # Age bounds
+    def parse_int(field):
+        try:
+            return int(request.data[field])
+        except (ValueError, TypeError):
+            raise ValueError(f"'{field}' must be an integer.")
+
+    if 'min_age' in request.data:
+        try:
+            min_age = parse_int('min_age')
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        user.min_age = min_age
+        updated.append('min_age')
+
+    if 'max_age' in request.data:
+        try:
+            max_age = parse_int('max_age')
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        user.max_age = max_age
+        updated.append('max_age')
+
+    # Validate bounds
+    if user.min_age is not None and user.max_age is not None:
+        if user.min_age > user.max_age:
+            return Response(
+                {'detail': "'min_age' cannot be greater than 'max_age'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    if not updated:
+        return Response({'detail': 'No preferences provided.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    user.save(update_fields=updated)
+    return Response(
+        {'detail': 'Preferences updated.', 'updated': updated},
+        status=status.HTTP_200_OK
+    )
