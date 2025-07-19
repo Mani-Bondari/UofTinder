@@ -16,4 +16,39 @@
 .home-container p {
   color: var(--uoft-light-blue);
   font-size: 1.1rem;
+}
+.user-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0 0;
+  width: 100%;
+  max-width: 400px;
+}
+.user-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--uoft-grey);
+  color: var(--uoft-blue);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 0.7rem;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 8px rgba(0,32,78,0.04);
+}
+.user-name {
+  font-weight: 600;
+}
+.user-elo {
+  font-size: 0.98rem;
+  color: var(--uoft-light-blue);
+}
+@media (max-width: 600px) {
+  .user-list-item {
+    font-size: 1rem;
+    padding: 0.8rem 0.7rem;
+  }
+  .user-list {
+    max-width: 100vw;
+  }
 } 

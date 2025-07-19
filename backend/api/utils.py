@@ -2,41 +2,39 @@
 import random
 from .models import User
 
+def expected_score(rating_a, rating_b):
+    return 1.0 / (1 + 10 ** ((rating_b - rating_a) / 400))
 
-def update_elo(swiper, target, k=32, swipe_right=True):
-    """
-    Update `target.elo` based on a swipe by `swiper`.
-    swipe_right=True  → treat as a “win” for `target`
-    swipe_right=False → treat as a “loss” for `target`
-    """
-    # current ratings
-    R_a, R_b = swiper.elo, target.elo
+def update_elo_event(user_a, user_b, outcome, k):
+    # user_a is the one whose ELO is being updated
+    EA = expected_score(user_a.elo, user_b.elo)
+    user_a.elo = round(user_a.elo + k * (outcome - EA))
+    user_a.save(update_fields=['elo'])
 
-    # expected score for target (B)
-    E_b = 1.0 / (1 + 10 ** ((R_a - R_b) / 400))
+def process_swipe(user_a, user_b, swiped_right):
+    # user_b swipes on user_a
+    # outcome = 1 if right, 0 if left
+    outcome = 1 if swiped_right else 0
+    k = 16
+    update_elo_event(user_a, user_b, outcome, k)
 
-    # actual score
-    S_b = 1.0 if swipe_right else 0.0
+def process_match(user_a, user_b):
+    # Both users matched (swiped right on each other)
+    outcome = 1
+    k = 32
+    update_elo_event(user_a, user_b, outcome, k)
+    update_elo_event(user_b, user_a, outcome, k)
 
-    # update target’s Elo
-    target.elo = round(R_b + k * (S_b - E_b))
-    target.save(update_fields=['elo'])
+def process_unmatch(user_a, user_b):
+    # user_b unmatches user_a, user_a gets outcome=0, k=32
+    outcome = 0
+    k = 32
+    update_elo_event(user_a, user_b, outcome, k)
 
-
-# in api/utils.py
-import random
-
-def recommend_for(user, range_pts=100, limit=10):
-    """
-    Return up to `limit` users whose Elo is within ±range_pts of `user`.
-    """
-    low, high = user.elo - range_pts, user.elo + range_pts
-    qs = User.objects.filter(
-        elo__gte=low,
-        elo__lte=high
-    ).exclude(pk=user.pk)
-
-    # if you want a bit of randomness:
-    candidates = list(qs)
-    random.shuffle(candidates)
-    return candidates[:limit]
+def recommend_for(user, limit=10):
+    # Return up to `limit` users ordered by ELO closest to `user`
+    qs = User.objects.exclude(pk=user.pk)
+    # Annotate with abs diff, order by it
+    users = list(qs)
+    users.sort(key=lambda u: abs(u.elo - user.elo))
+    return users[:limit]

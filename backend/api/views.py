@@ -11,7 +11,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.shortcuts import get_object_or_404
 from .models import User
-from .utils import update_elo,  recommend_for
+from .utils import update_elo,  process_swipe, process_match, process_unmatch, recommend_for
 
 User = get_user_model()
 
@@ -338,9 +338,42 @@ def swipe(request):
         return Response({'detail':'Cannot swipe yourself.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    update_elo(swiper, target,
-               swipe_right = (dirn=='right'))
+    process_swipe(target, swiper, swiped_right=(dirn=='right'))
     return Response({'detail':'swipe recorded.'})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def match(request):
+    """
+    POST { "user_id": 42 }
+    → updates both users' Elo for a match event.
+    """
+    user_a = request.user
+    user_b_id = request.data.get('user_id')
+    if not user_b_id:
+        return Response({'detail':'user_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+    user_b = get_object_or_404(User, pk=user_b_id)
+    if user_a == user_b:
+        return Response({'detail':'Cannot match yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+    process_match(user_a, user_b)
+    return Response({'detail':'match recorded.'})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def unmatch(request):
+    """
+    POST { "user_id": 42 }
+    → updates user A's Elo for an unmatch event (user B unmatches user A).
+    """
+    user_b = request.user
+    user_a_id = request.data.get('user_id')
+    if not user_a_id:
+        return Response({'detail':'user_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+    user_a = get_object_or_404(User, pk=user_a_id)
+    if user_a == user_b:
+        return Response({'detail':'Cannot unmatch yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+    process_unmatch(user_a, user_b)
+    return Response({'detail':'unmatch recorded.'})
 
 
 # in api/views.py
