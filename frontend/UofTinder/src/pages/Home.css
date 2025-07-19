@@ -1,0 +1,19 @@
+.home-container {
+  background: var(--uoft-white);
+  border-radius: 16px;
+  box-shadow: 0 4px 32px rgba(0,32,78,0.08);
+  padding: 2rem;
+  max-width: 480px;
+  margin: 3rem auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.home-container h1 {
+  color: var(--uoft-blue);
+  margin-bottom: 1rem;
+}
+.home-container p {
+  color: var(--uoft-light-blue);
+  font-size: 1.1rem;
+} 

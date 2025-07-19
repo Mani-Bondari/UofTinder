@@ -1,8 +1,11 @@
 #root {
-  max-width: 1280px;
+  max-width: 480px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+  background: var(--uoft-white);
+  border-radius: 16px;
+  box-shadow: 0 4px 32px rgba(0,32,78,0.08);
 }
 
 .logo {
@@ -39,4 +42,10 @@
 
 .read-the-docs {
   color: #888;
+}
+
+.uoftinder-logo {
+  width: 120px;
+  margin: 0 auto 2rem auto;
+  display: block;
 }
