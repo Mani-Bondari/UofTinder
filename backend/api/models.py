@@ -20,6 +20,10 @@ class User(AbstractUser):
         blank=True,
     )
 
+    pronouns = models.CharField(max_length=20, blank=True)
+
+    elo = models.IntegerField(default=1200)   # start everyone at 1200
+
     bio = models.TextField(blank=True)
     location = models.CharField(max_length=255, blank=True)
 

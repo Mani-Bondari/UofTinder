@@ -1,5 +1,5 @@
 from django.urls import path
-from api.views import signup, login, logout, upload_profile_image, upload_additional_photos, update_bio, update_preferences
+from api.views import signup, login, logout, upload_profile_image, upload_additional_photos, update_bio, update_preferences, swipe, recommendations
 
 urlpatterns = [
     path('signup/', signup, name='signup'),
@@ -9,4 +9,6 @@ urlpatterns = [
     path('upload/aux/', upload_additional_photos, name='upload_additional_photos'),
     path('edit/bio/', update_bio, name='update_bio'),
     path('edit/preferences/', update_preferences, name='update_preferences'),
+    path('swipe/', swipe, name='swipe'),
+    path('recommend/', recommendations, name='recommend_users'),
 ]

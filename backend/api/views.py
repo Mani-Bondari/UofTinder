@@ -9,6 +9,9 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.shortcuts import get_object_or_404
+from .models import User
+from .utils import update_elo,  recommend_for
 
 User = get_user_model()
 
@@ -234,6 +237,7 @@ def update_preferences(request):
       "location": "<city or text>", # optional
       "min_age": <integer>,         # optional
       "max_age": <integer>          # optional
+      "pronouns": "<text>"            # optional
     }
     → validates refresh token, updates any of gender, location, min_age, max_age provided.
     """
@@ -298,6 +302,10 @@ def update_preferences(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    if 'pronouns' in request.data:
+        user.pronouns = request.data.get('pronouns') or ''
+        updated.append('pronouns')
+
     if not updated:
         return Response({'detail': 'No preferences provided.'},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -307,3 +315,46 @@ def update_preferences(request):
         {'detail': 'Preferences updated.', 'updated': updated},
         status=status.HTTP_200_OK
     )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def swipe(request):
+    """
+    POST { "target_id": 42, "direction": "left"|"right" }
+    → updates the target’s Elo.
+    """
+    swiper = request.user
+    tid     = request.data.get('target_id')
+    dirn    = request.data.get('direction')
+
+    if dirn not in ('left','right') or not tid:
+        return Response({'detail':'target_id + direction required.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    target = get_object_or_404(User, pk=tid)
+    # don’t let users swipe on themselves
+    if target == swiper:
+        return Response({'detail':'Cannot swipe yourself.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    update_elo(swiper, target,
+               swipe_right = (dirn=='right'))
+    return Response({'detail':'swipe recorded.'})
+
+
+# in api/views.py
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def recommendations(request):
+    """
+    GET → returns a list of up to 10 users near your Elo.
+    """
+    recs = recommend_for(request.user)
+    data = [{
+        'id': u.id,
+        'username': u.username,
+        'elo': u.elo,
+        # add any serialized fields you need…
+    } for u in recs]
+    return Response(data)
